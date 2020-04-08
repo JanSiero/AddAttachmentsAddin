@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+	<Product Id="*" Name="AddAttachmentsAddIn" Language="1033" Version="1.0.0.0" Manufacturer="Siero CRM Consultancy" UpgradeCode="560f070f-461b-44f6-a6cb-8c0d5229dd02">
+		<Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
+
+		<!-- Icon for Add/Remove Programs - see 
+		http://wixtoolset.org/documentation/manual/v3/howtos/ui_and_localization/configure_arp_appearance.html -->
+		<Icon Id="siero.ico" SourceFile="Resources\siero.ico"/>
+		<Property Id="ARPPRODUCTICON" Value="siero.ico" />
+		
+		<MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+
+		<!-- Check for Visual Studio for office runtime distributable, check the one supplied with office (v4) as well as
+		the redistributable (v4R) -->
+		<Property Id="VSTORUNTIMEREDIST">
+			<RegistrySearch
+				Id="VSTORuntimeRedist"
+				Root="HKLM"
+				Key="SOFTWARE\Microsoft\VSTO Runtime Setup\v4"
+				Name="Version"
+				Type="raw" />
+		</Property>
+		<Property Id="VSTORUNTIMEREDIST_R">
+			<RegistrySearch
+				Id="VSTORuntimeRedist_r"
+				Root="HKLM"
+				Key="SOFTWARE\Microsoft\VSTO Runtime Setup\v4R"
+				Name="Version"
+				Type="raw" />
+		</Property>
+		<Condition Message="This application requires Visual Studio 2010 Tools for Office Runtime. Please install from
+http://www.microsoft.com/en-us/download/details.aspx?id=54251">
+			<![CDATA[Installed OR VSTORUNTIMEREDIST>="10.0.30319" OR VSTORUNTIMEREDIST_R>="10.0.30319"]]>
+		</Condition>
+
+		<PropertyRef Id="NETFRAMEWORK40FULL"/>
+		<Condition Message="This application requires .NET Framework 4.0 or higher. Please install from 
+https://www.microsoft.com/en-us/download/details.aspx?id=55170">
+			<![CDATA[Installed OR NETFRAMEWORK40FULL]]>
+		</Condition>
+
+		<!-- Make sure .cab files are included in the MSI package - see
+		http://wixtoolset.org/documentation/manual/v3/xsd/wix/media.html -->
+		<MediaTemplate EmbedCab="yes"/>
+			
+		<Feature Id="ProductFeature" Title="AttachmentsAddIn Setup" Level="1">
+			<ComponentRef Id="AddAttachmentsAddIn_vsto_Component" />
+			<ComponentGroupRef Id="ProductComponents" />
+		</Feature>
+	
+		<!-- WiX produces a 32-bit installer, to make sure the addin also works for Outlook X64, copy the registry keys
+		to the corresponding X64 registry using a custom action with REG.EXE - see 
+		https://blogs.msdn.microsoft.com/gsmyth/2013/07/12/add-in-for-64-and-32-bit-office/ -->	
+		
+		<Property Id="CopyReg64Key" 
+			Value='"REG.EXE" COPY "HKLM\Software\WoW6432Node\Microsoft\Office\Outlook\Addins\AddAttachmentsAddIn" "HKLM\Software\Microsoft\Office\Outlook\Addins\AddAttachmentsAddIn" /s /f /reg:64' />
+		<CustomAction Id="CopyReg64Key" Execute="deferred" Return="ignore" Impersonate="no" BinaryKey="WixCA" DllEntry="CAQuietExec" />
+
+		<Property Id="DeleteReg64Key" Value='"REG.EXE" DELETE "HKLM\Software\Microsoft\Office\Outlook\Addins\AddAttachmentsAddIn" /f /reg:64' />
+		<CustomAction Id="DeleteReg64Key" Execute="deferred" Return="ignore" Impersonate="no" BinaryKey="WixCA" DllEntry="CAQuietExec" />
+
+		<InstallExecuteSequence>
+			<Custom Action="CopyReg64Key" Before="InstallFinalize">
+				<![CDATA[$AddAttachmentsAddIn_vsto_Component=3]]>
+			</Custom>
+			<Custom Action="DeleteReg64Key" Before="RemoveFiles">
+				<![CDATA[$AddAttachmentsAddIn_vsto_Component=2]]>
+			</Custom>
+		</InstallExecuteSequence>
+	</Product>
+
+	<Fragment>
+		<Directory Id="TARGETDIR" Name="SourceDir">
+			<Directory Id="ProgramFilesFolder">
+				<Directory Id="INSTALLFOLDER" Name="AddAttachmentsAddIn">
+					<Component Id="AddAttachmentsAddIn_vsto_Component">
+						<File Id="AddAttachmentsAddIn_vsto" KeyPath="yes" Name="AddAttachmentsAddIn.vsto" Source="$(var.AddinFiles)"></File>
+						<RegistryKey Root="HKLM" Key="Software\Microsoft\Office\Outlook\Addins\AddAttachmentsAddIn">
+							<RegistryValue Name="FriendlyName" Value="AddAttachments AddIn" Type="string" />
+							<RegistryValue Name="Description" Value="AddAttachments AddIn" Type="string" />
+							<!-- Registry key for Manifest requires "file:///" - see
+							https://docs.microsoft.com/en-us/visualstudio/vsto/registry-entries-for-vsto-add-ins -->
+							<RegistryValue Name="Manifest" Value="file:///[INSTALLFOLDER]AddAttachmentsAddIn.vsto|vstolocal"
+							Type="string" />
+							<RegistryValue Name="LoadBehavior" Value="3" Type="integer" />
+						</RegistryKey>
+					</Component>
+				</Directory>
+			</Directory>
+		</Directory>
+	</Fragment>
+
+	<Fragment>
+		<ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+			<Component Id="AddAttachmentsAddIn_dll_Component">
+				<File Id="AddAttachmentsAddIn_dll" KeyPath="yes" Name="AddAttachmentsAddIn.dll" Source="$(var.AddinFiles)"></File>
+			</Component>
+			<Component Id="AddAttachmentsAddIn_dll_manifest_Component">
+				<File Id="AddAttachmentsAddIn_dll_manifest" KeyPath="yes" Name="AddAttachmentsAddIn.dll.manifest" Source="$(var.AddinFiles)"></File>
+			</Component>			
+			<Component Id="MSOfficeToolsCommon_dll_Component">
+				<File Id="MSOfficeToolsCommon_dll" KeyPath="yes" Name="Microsoft.Office.Tools.Common.v4.0.Utilities.dll" Source="$(var.AddinFiles)"></File>
+			</Component>
+			<Component Id="MSOfficeToolsOutlook_dll_Component">
+				<File Id="MSOfficeToolsOutlook_dll" KeyPath="yes" Name="Microsoft.Office.Tools.Outlook.v4.0.Utilities.dll" Source="$(var.AddinFiles)"></File>
+			</Component>
+		</ComponentGroup>
+	</Fragment>
+</Wix>
